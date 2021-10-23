@@ -25,7 +25,9 @@ async function startApolloServer() {
     fs.readFileSync("./schema.graphql", { encoding: "utf8" })
   );
   const resolvers = require("./resolvers");
-  const context = ({ req }) => ({ user: req.user });
+  const context = ({ req }) => ({
+    user: req.user && db.users.get(req.user.sub),
+  });
   const apolloServer = new ApolloServer({ typeDefs, resolvers, context });
   await apolloServer.start();
   apolloServer.applyMiddleware({ app, path: "/graphql" });
