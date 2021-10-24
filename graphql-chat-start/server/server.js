@@ -1,5 +1,9 @@
 const fs = require("fs");
+const http = require("http");
+const { SubscriptionServer } = require("subscriptions-transport-ws");
+const { makeExecutableSchema } = require("@graphql-tools/schema");
 const { ApolloServer, gql } = require("apollo-server-express");
+const { execute, subscribe } = require("graphql");
 const cors = require("cors");
 const express = require("express");
 const expressJwt = require("express-jwt");
@@ -11,6 +15,7 @@ async function startApolloServer() {
   const jwtSecret = Buffer.from("xkMBdsE+P6242Z2dPV3RD91BPbLIko7t", "base64");
 
   const app = express();
+  const httpServer = http.createServer(app);
   app.use(
     cors(),
     express.json(),
@@ -32,8 +37,35 @@ async function startApolloServer() {
     }
     return {};
   }
+  const schema = makeExecutableSchema({ typeDefs, resolvers });
 
-  const apolloServer = new ApolloServer({ typeDefs, resolvers, context });
+  const apolloServer = new ApolloServer({
+    typeDefs,
+    resolvers,
+    context,
+    plugins: [
+      {
+        async serverWillStart() {
+          return {
+            async drainServer() {
+              subscriptionServer.close();
+            },
+          };
+        },
+      },
+    ],
+  });
+  const subscriptionServer = SubscriptionServer.create(
+    {
+      schema,
+      execute,
+      subscribe,
+    },
+    {
+      server: httpServer,
+      path: apolloServer.graphqlPath,
+    }
+  );
   await apolloServer.start();
   apolloServer.applyMiddleware({ app, path: "/graphql" });
 
@@ -47,9 +79,10 @@ async function startApolloServer() {
     const token = jwt.sign({ sub: user.id }, jwtSecret);
     res.send({ token });
   });
-  await new Promise((resolve) => app.listen({ port }, resolve));
+
+  await new Promise((resolve) => httpServer.listen({ port }, resolve));
   console.log(`Server started on port ${port}`);
-  return { server: apolloServer, app };
+  return { server: apolloServer, app: httpServer };
 }
 
 startApolloServer();
