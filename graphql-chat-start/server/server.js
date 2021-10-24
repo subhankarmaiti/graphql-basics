@@ -35,13 +35,6 @@ async function startApolloServer() {
     if (req && req.user) {
       return { userId: req.user.sub };
     }
-    if (connection && connection.context && connection.context.accessToken) {
-      const decodedToken = jwt.verify(
-        connection.context.accessToken,
-        jwtSecret
-      );
-      return { userId: decodedToken.sub };
-    }
     return {};
   }
   const schema = makeExecutableSchema({ typeDefs, resolvers });
@@ -67,6 +60,15 @@ async function startApolloServer() {
       schema,
       execute,
       subscribe,
+      onConnect: (connectionParams, webSocket) => {
+        if (connectionParams?.accessToken) {
+          const decodedToken = jwt.verify(
+            connectionParams.accessToken,
+            jwtSecret
+          );
+          return { userId: decodedToken.sub };
+        }
+      },
     },
     {
       server: httpServer,
